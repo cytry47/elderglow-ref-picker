@@ -79,7 +79,7 @@ footer.dock{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--pa
 <div class="wrap">
   <header class="top">
     <h1>Elderglow Ref Picker</h1>
-    <p class="intro">Every reference made for the Elderglow asset swap, in two looks: <b>Elderglow</b> (low-poly, flat colours, like your current kit) and <b>Pawty</b> (glossy clay toy). Tap every image you like for each asset, as many as you want. Add a comment where you want changes. Then put your name in the bar at the bottom and <span id="howsend">press <b>Submit picks</b></span>. Your picks are kept in this browser, so you can come back and send again.</p>
+    <p class="intro">Every reference made for the Elderglow asset swap, in two looks: <b>Elderglow</b> (low-poly, flat colours, like your current kit) and <b>Pawty</b> (glossy clay toy). Tap every image you like for each asset, as many as you want. Add a comment where you want changes. Then put your name in the bar at the bottom and <span id="howsend">press <b>Submit picks</b></span>: it downloads a small .md file with your picks and comments. Send that file to Ruben. Your picks stay in this browser, so you can come back and change them.</p>
     <div class="legend"><span><b>Tap</b> = pick / unpick</span><span><b>&#x2922;</b> = view large</span><span><b style="color:var(--warn)">Red label</b> = failed our anatomy check (extra or missing limbs)</span><span><b>Homes</b> = one cleaned pick per look, already approved by Ruben</span></div>
   </header>
   <nav class="bar" id="bar" aria-label="Filters"></nav>
@@ -213,46 +213,58 @@ footer.dock{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--pa
 
   function setStatus(t, cls){ const s = $('status'); s.textContent = t; s.className = 'status' + (cls ? ' ' + cls : ''); }
 
-  function asText(){
-    const who = $('who').value.trim() || 'Someone';
-    const lines = ['Elderglow ref picks from ' + who + ':'];
-    D.groups.forEach(g => g.assets.forEach(a => {
-      const p = picks[a.role] ? Object.keys(picks[a.role]) : [];
-      const c = comments[a.role];
-      if (!p.length && !c) return;
-      lines.push('- ' + a.role + ': ' + (p.length ? p.join(', ') : '(none)') + (c ? '  | comment: ' + c.replace(/\s+/g, ' ').trim() : ''));
-    }));
-    return lines.join('\n');
+  // ---- submit = download a .md file (+ save to the page's db when this viewer may write) ----
+  let db = null, dl = null, canWrite = null;
+  const slug = s => (s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'someone').slice(0, 40);
+  function asMarkdown(who){
+    const L = ['# Elderglow ref picks: ' + who, '', 'Sent ' + new Date().toLocaleString() + '. Image ids are look:image (_r2 = round 2).', ''];
+    D.groups.forEach(g => {
+      const rows = g.assets.filter(a => picks[a.role] || comments[a.role]);
+      if (!rows.length) return;
+      L.push('## ' + g.title, '');
+      rows.forEach(a => {
+        L.push('### ' + assetLabel(a.role) + ' (`' + a.role + '`)');
+        const p = picks[a.role] ? Object.keys(picks[a.role]) : [];
+        L.push(p.length ? p.map(x => '- ' + x).join('\n') : '- (no image picked)');
+        if (comments[a.role]) L.push('', '> ' + comments[a.role].trim().replace(/\n/g, '\n> '));
+        L.push('');
+      });
+    });
+    const skipped = D.groups.reduce((n, g) => n + g.assets.filter(a => !picks[a.role] && !comments[a.role]).length, 0);
+    L.push('---', skipped + ' assets with no pick and no comment.', '');
+    return L.join('\n');
   }
+  function blobDownload(name, text){
+    const u = URL.createObjectURL(new Blob([text], {type: 'text/markdown'}));
+    const a = document.createElement('a'); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(u), 4000);
+  }
+  $('submit').onclick = async () => {
+    const who = $('who').value.trim();
+    if (!who) { setStatus('Add your name first.', 'err'); $('who').focus(); return; }
+    if (!counts().imgs && !Object.keys(comments).length) { setStatus('Pick at least one image or write a comment first.', 'err'); return; }
+    const name = 'elderglow-picks-' + slug(who) + '.md', md = asMarkdown(who);
+    $('submit').disabled = true; setStatus('Preparing your file\u2026');
+    let saved = false, file = false;
+    if (db && canWrite !== false) {
+      try { await db.doc('picks/' + slug(who)).set({who, picks: Object.fromEntries(Object.entries(picks).map(([r, o]) => [r, Object.keys(o)])), comments, at: new Date().toISOString()}); saved = true; } catch (e) {}
+    }
+    try { if (dl) await dl.save({filename: name, data: md}); else blobDownload(name, md); file = true; } catch (e) {}
+    $('submit').disabled = false;
+    if (file) setStatus('Downloaded ' + name + '. Send that file to Ruben.' + (saved ? ' (Also saved here.)' : ''), 'ok');
+    else if (saved) setStatus('Saved here, Ruben can see it. (The file download did not happen.)', 'ok');
+    else setStatus('The download did not start. Press Copy as text instead and send that.', 'err');
+  };
   $('copy').onclick = () => {
-    const t = asText();
-    navigator.clipboard && navigator.clipboard.writeText(t).then(() => setStatus('Copied. Paste it to Ruben.', 'ok'),
-      () => fallbackCopy(t));
-    if (!navigator.clipboard) fallbackCopy(t);
+    const t = asMarkdown($('who').value.trim() || 'Someone');
+    if (navigator.clipboard) navigator.clipboard.writeText(t).then(() => setStatus('Copied. Paste it to Ruben.', 'ok'), () => fallbackCopy(t));
+    else fallbackCopy(t);
   };
   function fallbackCopy(t){
     const ta = document.createElement('textarea'); ta.value = t; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select();
     try { document.execCommand('copy'); setStatus('Copied. Paste it to Ruben.', 'ok'); } catch (e) { setStatus('Copy blocked: select the text in the box and copy it by hand.', 'err'); ta.style.opacity = '1'; ta.style.position = 'static'; return; }
     ta.remove();
   }
-
-  // ---- shared store: picks/<name-slug> -------------------------------------------------
-  let db = null;
-  const slug = s => (s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'someone').slice(0, 40);
-  $('submit').onclick = async () => {
-    const who = $('who').value.trim();
-    if (!who) { setStatus('Add your name first.', 'err'); $('who').focus(); return; }
-    if (!counts().imgs && !Object.keys(comments).length) { setStatus('Pick at least one image or write a comment first.', 'err'); return; }
-    if (!db) { setStatus('Saving is not available in this view. Use Copy as text and send it to Ruben.', 'err'); return; }
-    $('submit').disabled = true; setStatus('Submitting\u2026');
-    const body = {who, picks: Object.fromEntries(Object.entries(picks).map(([r, o]) => [r, Object.keys(o)])), comments, at: new Date().toISOString()};
-    try {
-      await db.doc('picks/' + slug(who)).set(body);
-      setStatus('Submitted ' + new Date().toLocaleTimeString() + '. Thanks! You can change picks and submit again.', 'ok');
-    } catch (e) {
-      setStatus(e && e.code === 'invalid_argument' ? 'This view cannot save. Use Copy as text and send it to Ruben.' : 'Could not save right now (' + ((e && e.code) || 'error') + '). Try again, or use Copy as text.', 'err');
-    } finally { $('submit').disabled = false; }
-  };
 
   function showSubs(snap){
     const docs = (snap.docs || []).map(d => d.data()).filter(Boolean).sort((a, b) => String(b.at).localeCompare(String(a.at)));
@@ -268,17 +280,14 @@ footer.dock{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--pa
   }
 
   render();
+  setStatus('When you are done: Submit picks downloads a .md file to send to Ruben.');
   if (window.claude && claude.use) {
+    claude.use('downloads').then(d => { dl = d; });
     claude.use('db').then(d => {
-      db = d; if (!db) { offline(); return; }
+      db = d; if (!db) return;
+      claude.use('user').then(u => u ? u.can('data.write') : null).then(w => { canWrite = w; }).catch(() => {});
       try { db.collection('picks').onSnapshot(showSubs, () => {}); } catch (e) {}
     });
-  } else { offline(); }
-  function offline(){
-    $('submit').hidden = true; $('copy').className = 'btn'; $('copy').textContent = 'Copy my picks';
-    const h = $('howsend'); h.textContent = 'press '; const b = document.createElement('b'); b.textContent = 'Copy my picks'; h.appendChild(b);
-    h.appendChild(document.createTextNode(', then paste the text to Ruben'));
-    setStatus('When you are done: Copy my picks, then paste it to Ruben.');
   }
 })();
 </script>
