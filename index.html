@@ -1,0 +1,285 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style><meta name="robots" content="noindex"></head><body><title>Elderglow Ref Picker</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=Nunito+Sans:wght@400;600;700&display=swap">
+<style>
+/* Layout: sticky look/filter bar, one card per asset, each card = two strips of candidate tiles (look A / look B) + comment box; sticky submit footer. */
+:root{
+  --bg:#f3f1ea; --panel:#fffdf7; --ink:#24302a; --muted:#66706a; --line:#d9d5c8;
+  --moss:#3f7a4a; --moss-soft:#e1eedb; --glow:#1f9fb4; --glow-soft:#dcf1f4; --warn:#c0392b; --warn-soft:#f8e1de;
+  --display:"Fraunces",Georgia,serif; --body:"Nunito Sans",system-ui,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#151a17; --panel:#1d2420; --ink:#e7ece6; --muted:#9aa59e; --line:#323b35;
+  --moss:#7cc488; --moss-soft:#22362a; --glow:#5fd0e0; --glow-soft:#173238; --warn:#f08070; --warn-soft:#3a2220; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#151a17; --panel:#1d2420; --ink:#e7ece6; --muted:#9aa59e; --line:#323b35;
+  --moss:#7cc488; --moss-soft:#22362a; --glow:#5fd0e0; --glow-soft:#173238; --warn:#f08070; --warn-soft:#3a2220; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 120px}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+.wrap{max-width:1180px;margin:0 auto}
+header.top{padding-block:28px 12px}
+h1{font-family:var(--display);font-weight:600;font-size:clamp(28px,4vw,40px);margin:0;text-wrap:balance}
+.intro{color:var(--muted);max-width:68ch;margin:6px 0 0}
+.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding-block:10px;border-bottom:1px solid var(--line);
+  display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.chip{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:999px;padding:5px 12px;font:600 13px var(--body);cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.chip:focus-visible,.tile:focus-visible,button:focus-visible,textarea:focus-visible,input:focus-visible{outline:2px solid var(--glow);outline-offset:2px}
+.bar .sep{width:1px;height:22px;background:var(--line)}
+.bar .count{margin-left:auto;color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums}
+.legend{display:flex;flex-wrap:wrap;gap:14px;color:var(--muted);font-size:13px;margin-top:10px}
+.legend b{color:var(--ink)}
+h2{font-family:var(--display);font-weight:600;font-size:24px;margin:36px 0 4px}
+.gnote{color:var(--muted);margin:0 0 12px;font-size:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:14px;display:grid;gap:10px}
+.card.has-pick{border-color:var(--moss)}
+.card h3{margin:0;font:700 16px var(--body);display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.card h3 .n{color:var(--muted);font-weight:600;font-size:13px;font-variant-numeric:tabular-nums}
+.lookrow{display:grid;grid-template-columns:96px minmax(0,1fr);gap:10px;align-items:start}
+.lookname{font:700 12px var(--body);text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding-top:6px}
+.lookname small{display:block;font-weight:600;text-transform:none;letter-spacing:0;font-size:12px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:8px;min-width:0}
+.tile{position:relative;aspect-ratio:1;border-radius:8px;overflow:hidden;border:2px solid transparent;background:#e6e6e6;cursor:pointer;padding:0}
+.tile .spr{position:absolute;inset:0;background-repeat:no-repeat;pointer-events:none}
+.tile .tag{position:absolute;left:4px;bottom:4px;font:600 10px var(--body);background:rgba(255,255,255,.88);color:#333;border-radius:4px;padding:1px 5px}
+.tile .bad{position:absolute;left:4px;top:4px;right:4px;font:700 10px var(--body);background:var(--warn);color:#fff;border-radius:4px;padding:1px 5px;line-height:1.3}
+.tile .tick{position:absolute;right:5px;bottom:5px;width:24px;height:24px;border-radius:50%;background:var(--moss);color:#fff;font:700 15px/24px var(--body);text-align:center;display:none}
+.tile[aria-pressed="true"]{border-color:var(--moss);box-shadow:0 0 0 2px var(--moss)}
+.tile[aria-pressed="true"] .tick{display:block}
+.tile .zoom{position:absolute;right:4px;top:4px;width:26px;height:26px;border-radius:6px;border:0;background:rgba(255,255,255,.85);color:#333;font:700 14px var(--body);cursor:zoom-in;display:grid;place-items:center}
+.tile .bad ~ .zoom{top:26px}
+label.cl{font:600 13px var(--body);color:var(--muted)}
+textarea{width:100%;min-height:52px;resize:vertical;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:14px var(--body);padding:8px 10px}
+footer.dock{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--panel);border-top:1px solid var(--line);
+  padding:10px max(16px,env(safe-area-inset-right,0px)) calc(10px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.dock .in{max-width:1180px;margin:0 auto;display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.dock input{border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:14px var(--body);padding:8px 10px;width:170px}
+.btn{border:0;border-radius:8px;padding:9px 16px;font:700 14px var(--body);cursor:pointer;background:var(--moss);color:#fff}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.btn[disabled]{opacity:.5;cursor:default}
+.status{font-size:13px;color:var(--muted);min-width:0;flex:1 1 220px}
+.status.ok{color:var(--moss)} .status.err{color:var(--warn)}
+.lb{position:fixed;inset:0;z-index:20;background:rgba(10,14,12,.82);display:grid;place-items:center;padding:20px}
+.lb[hidden],[hidden]{display:none!important}
+.lb .frame{position:relative;width:min(86vw,86vh,768px);aspect-ratio:1;overflow:hidden;border-radius:10px;background:#e6e6e6}
+.lb .frame #lbimg{position:absolute;inset:0;background-repeat:no-repeat}
+.lb .cap{color:#fff;text-align:center;margin-top:10px;font-weight:600}
+.lb button{position:absolute;top:calc(14px + env(safe-area-inset-top,0px));right:max(14px,env(safe-area-inset-right,0px));}
+.subs{margin-top:28px;border-top:1px solid var(--line);padding-top:12px}
+.subs h2{margin-top:8px}
+.sub{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px;font-size:14px}
+.sub pre{white-space:pre-wrap;margin:6px 0 0;font:13px/1.45 ui-monospace,Consolas,monospace;max-height:280px;overflow:auto}
+@media (max-width:560px){.lookrow{grid-template-columns:1fr}.lookname{padding-top:0}.tiles{grid-template-columns:repeat(auto-fill,minmax(92px,1fr))}}
+@media (prefers-reduced-motion:no-preference){.tile{transition:border-color .12s,box-shadow .12s}}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <h1>Elderglow Ref Picker</h1>
+    <p class="intro">Every reference made for the Elderglow asset swap, in two looks: <b>Elderglow</b> (low-poly, flat colours, like your current kit) and <b>Pawty</b> (glossy clay toy). Tap every image you like for each asset, as many as you want. Add a comment where you want changes. Then put your name in the bar at the bottom and <span id="howsend">press <b>Submit picks</b></span>. Your picks are kept in this browser, so you can come back and send again.</p>
+    <div class="legend"><span><b>Tap</b> = pick / unpick</span><span><b>&#x2922;</b> = view large</span><span><b style="color:var(--warn)">Red label</b> = failed our anatomy check (extra or missing limbs)</span><span><b>Homes</b> = one cleaned pick per look, already approved by Ruben</span></div>
+  </header>
+  <nav class="bar" id="bar" aria-label="Filters"></nav>
+  <main id="main"><p class="gnote">Loading references&hellip;</p></main>
+  <section class="subs" id="subs" hidden>
+    <h2>Submitted picks</h2>
+    <p class="gnote">Everyone's latest submission, newest first.</p>
+    <div id="sublist"></div>
+  </section>
+</div>
+
+<footer class="dock">
+  <div class="in">
+    <input id="who" type="text" placeholder="Your name" aria-label="Your name" maxlength="40" value="Aeryn">
+    <button class="btn" id="submit" type="button">Submit picks</button>
+    <button class="btn ghost" id="copy" type="button">Copy as text</button>
+    <span class="status" id="status" role="status">Nothing picked yet.</span>
+  </div>
+</footer>
+
+<div class="lb" id="lb" hidden>
+  <div><div class="frame"><div id="lbimg" role="img" aria-label="Large view"></div></div><div class="cap" id="lbcap"></div></div>
+  <button class="btn ghost" id="lbclose" type="button" style="color:#fff;border-color:#fff">Close</button>
+</div>
+
+<script src="data.js"></script>
+<script>
+(function(){
+  const D = window.PICKER_DATA;
+  const LOOKS = {elderglow:{name:'Elderglow', sub:'kit look'}, pawty:{name:'Pawty', sub:'clay look'}};
+  const DRAFT = 'eg-picker-draft-v1';
+  let picks = {}, comments = {}, groupFilter = 'all', lookFilter = 'both', onlyPicked = false;
+  try { const d = JSON.parse(localStorage.getItem(DRAFT) || 'null'); if (d) { picks = d.picks || {}; comments = d.comments || {}; } } catch (e) {}
+  const saveDraft = () => { try { localStorage.setItem(DRAFT, JSON.stringify({picks, comments})); } catch (e) {} };
+  const pretty = s => s.replace(/_r2$/, '').replace(/_/g, ' ');
+  const assetLabel = r => r.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  const $ = id => document.getElementById(id);
+
+  function bar(){
+    const b = $('bar'); b.textContent = '';
+    const mk = (label, pressed, fn) => { const c = document.createElement('button'); c.type = 'button'; c.className = 'chip'; c.textContent = label; c.setAttribute('aria-pressed', pressed); c.onclick = fn; b.appendChild(c); };
+    mk('All groups', groupFilter === 'all', () => { groupFilter = 'all'; render(); });
+    D.groups.forEach(g => mk(g.title, groupFilter === g.key, () => { groupFilter = g.key; render(); }));
+    const s = document.createElement('span'); s.className = 'sep'; b.appendChild(s);
+    mk('Both looks', lookFilter === 'both', () => { lookFilter = 'both'; render(); });
+    mk('Elderglow only', lookFilter === 'elderglow', () => { lookFilter = 'elderglow'; render(); });
+    mk('Pawty only', lookFilter === 'pawty', () => { lookFilter = 'pawty'; render(); });
+    mk('Picked only', onlyPicked, () => { onlyPicked = !onlyPicked; render(); });
+    const n = document.createElement('span'); n.className = 'count'; n.id = 'count'; b.appendChild(n);
+  }
+
+  function counts(){
+    let imgs = 0, assets = 0;
+    for (const r in picks) { const k = Object.keys(picks[r]).length; imgs += k; if (k) assets++; }
+    const total = D.groups.reduce((a, g) => a + g.assets.length, 0);
+    const c = $('count'); if (c) c.textContent = assets + ' / ' + total + ' assets picked \u00b7 ' + imgs + ' images';
+    return {imgs, assets};
+  }
+
+  function tile(a, o){
+    const t = document.createElement('div'); t.className = 'tile'; t.tabIndex = 0; t.setAttribute('role', 'button');
+    const on = !!(picks[a.role] && picks[a.role][o.id]);
+    t.setAttribute('aria-pressed', on); t.setAttribute('aria-label', LOOKS[o.look].name + ' ' + pretty(o.name) + (o.fail ? ', failed anatomy check: ' + o.fail : ''));
+    const img = document.createElement('div'); img.className = 'spr'; sprite(img, a, o);
+    t.appendChild(img);
+    if (o.fail) { const b = document.createElement('span'); b.className = 'bad'; b.textContent = 'Anatomy: ' + o.fail; t.appendChild(b); }
+    const tag = document.createElement('span'); tag.className = 'tag'; tag.textContent = o.name.slice(a.role.length + 1).replace('_r2', ' (r2)') || 'clean'; t.appendChild(tag);
+    const tick = document.createElement('span'); tick.className = 'tick'; tick.textContent = '\u2713'; t.appendChild(tick);
+    const z = document.createElement('button'); z.type = 'button'; z.className = 'zoom'; z.textContent = '\u2922'; z.setAttribute('aria-label', 'View large');
+    z.onclick = e => { e.stopPropagation(); zoom(a, o); }; t.appendChild(z);
+    const toggle = () => {
+      picks[a.role] = picks[a.role] || {};
+      if (picks[a.role][o.id]) delete picks[a.role][o.id]; else picks[a.role][o.id] = 1;
+      if (!Object.keys(picks[a.role]).length) delete picks[a.role];
+      t.setAttribute('aria-pressed', !!(picks[a.role] && picks[a.role][o.id]));
+      t.closest('.card').classList.toggle('has-pick', !!picks[a.role]);
+      t.closest('.card').querySelector('.n').textContent = cardCount(a);
+      saveDraft(); counts(); setStatus($('submit').hidden ? 'Not sent yet: press Copy my picks when done.' : 'Not submitted yet: press Submit picks when done.');
+    };
+    t.onclick = toggle; t.onkeydown = e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); toggle(); } };
+    return t;
+  }
+  const cardCount = a => { const k = picks[a.role] ? Object.keys(picks[a.role]).length : 0; return k ? k + ' picked' : 'none picked'; };
+
+  function render(){
+    bar();
+    const m = $('main'); m.textContent = '';
+    D.groups.forEach(g => {
+      if (groupFilter !== 'all' && groupFilter !== g.key) return;
+      const assets = g.assets.filter(a => !onlyPicked || picks[a.role]);
+      if (!assets.length) return;
+      const h = document.createElement('h2'); h.textContent = g.title; m.appendChild(h);
+      if (g.key !== 'homes') { const p = document.createElement('p'); p.className = 'gnote'; p.textContent = '8 candidates per look: a\u2013d from round 1, e\u2013h from round 2.'; m.appendChild(p); }
+      assets.forEach(a => {
+        const c = document.createElement('article'); c.className = 'card' + (picks[a.role] ? ' has-pick' : '');
+        const h3 = document.createElement('h3'); h3.textContent = assetLabel(a.role) + ' ';
+        const n = document.createElement('span'); n.className = 'n'; n.textContent = cardCount(a); h3.appendChild(n); c.appendChild(h3);
+        ['elderglow', 'pawty'].forEach(look => {
+          if (lookFilter !== 'both' && lookFilter !== look) return;
+          const row = document.createElement('div'); row.className = 'lookrow';
+          const ln = document.createElement('div'); ln.className = 'lookname'; ln.textContent = LOOKS[look].name;
+          const sm = document.createElement('small'); sm.textContent = LOOKS[look].sub; ln.appendChild(sm); row.appendChild(ln);
+          const ts = document.createElement('div'); ts.className = 'tiles';
+          a.options.filter(o => o.look === look).forEach(o => ts.appendChild(tile(a, o)));
+          row.appendChild(ts); c.appendChild(row);
+        });
+        const id = 'c-' + a.role;
+        const lab = document.createElement('label'); lab.className = 'cl'; lab.htmlFor = id; lab.textContent = 'Comment on ' + assetLabel(a.role) + ' (optional)';
+        const ta = document.createElement('textarea'); ta.id = id; ta.value = comments[a.role] || ''; ta.placeholder = 'What to keep, change or combine\u2026';
+        ta.oninput = () => { if (ta.value.trim()) comments[a.role] = ta.value; else delete comments[a.role]; saveDraft(); setStatus($('submit').hidden ? 'Not sent yet: press Copy my picks when done.' : 'Not submitted yet: press Submit picks when done.'); };
+        c.appendChild(lab); c.appendChild(ta); m.appendChild(c);
+      });
+    });
+    if (!m.children.length) { const p = document.createElement('p'); p.className = 'gnote'; p.textContent = 'Nothing picked yet in this view.'; m.appendChild(p); }
+    counts();
+  }
+
+  function sprite(el, a, o){
+    el.style.backgroundImage = 'url("img/' + a.role + '.webp")';
+    el.style.backgroundSize = (a.cols * 100) + '% 200%';
+    el.style.backgroundPosition = (a.cols > 1 ? o.col / (a.cols - 1) * 100 : 0) + '% ' + (o.row * 100) + '%';
+  }
+  function zoom(a, o){
+    sprite($('lbimg'), a, o);
+    $('lbcap').textContent = assetLabel(a.role) + ' \u00b7 ' + LOOKS[o.look].name + ' \u00b7 ' + pretty(o.name) + (o.fail ? ' \u00b7 anatomy: ' + o.fail : '');
+    $('lb').hidden = false; $('lbclose').focus();
+  }
+  $('lbclose').onclick = () => { $('lb').hidden = true; };
+  $('lb').onclick = e => { if (e.target === $('lb')) $('lb').hidden = true; };
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') $('lb').hidden = true; });
+
+  function setStatus(t, cls){ const s = $('status'); s.textContent = t; s.className = 'status' + (cls ? ' ' + cls : ''); }
+
+  function asText(){
+    const who = $('who').value.trim() || 'Someone';
+    const lines = ['Elderglow ref picks from ' + who + ':'];
+    D.groups.forEach(g => g.assets.forEach(a => {
+      const p = picks[a.role] ? Object.keys(picks[a.role]) : [];
+      const c = comments[a.role];
+      if (!p.length && !c) return;
+      lines.push('- ' + a.role + ': ' + (p.length ? p.join(', ') : '(none)') + (c ? '  | comment: ' + c.replace(/\s+/g, ' ').trim() : ''));
+    }));
+    return lines.join('\n');
+  }
+  $('copy').onclick = () => {
+    const t = asText();
+    navigator.clipboard && navigator.clipboard.writeText(t).then(() => setStatus('Copied. Paste it to Ruben.', 'ok'),
+      () => fallbackCopy(t));
+    if (!navigator.clipboard) fallbackCopy(t);
+  };
+  function fallbackCopy(t){
+    const ta = document.createElement('textarea'); ta.value = t; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); setStatus('Copied. Paste it to Ruben.', 'ok'); } catch (e) { setStatus('Copy blocked: select the text in the box and copy it by hand.', 'err'); ta.style.opacity = '1'; ta.style.position = 'static'; return; }
+    ta.remove();
+  }
+
+  // ---- shared store: picks/<name-slug> -------------------------------------------------
+  let db = null;
+  const slug = s => (s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'someone').slice(0, 40);
+  $('submit').onclick = async () => {
+    const who = $('who').value.trim();
+    if (!who) { setStatus('Add your name first.', 'err'); $('who').focus(); return; }
+    if (!counts().imgs && !Object.keys(comments).length) { setStatus('Pick at least one image or write a comment first.', 'err'); return; }
+    if (!db) { setStatus('Saving is not available in this view. Use Copy as text and send it to Ruben.', 'err'); return; }
+    $('submit').disabled = true; setStatus('Submitting\u2026');
+    const body = {who, picks: Object.fromEntries(Object.entries(picks).map(([r, o]) => [r, Object.keys(o)])), comments, at: new Date().toISOString()};
+    try {
+      await db.doc('picks/' + slug(who)).set(body);
+      setStatus('Submitted ' + new Date().toLocaleTimeString() + '. Thanks! You can change picks and submit again.', 'ok');
+    } catch (e) {
+      setStatus(e && e.code === 'invalid_argument' ? 'This view cannot save. Use Copy as text and send it to Ruben.' : 'Could not save right now (' + ((e && e.code) || 'error') + '). Try again, or use Copy as text.', 'err');
+    } finally { $('submit').disabled = false; }
+  };
+
+  function showSubs(snap){
+    const docs = (snap.docs || []).map(d => d.data()).filter(Boolean).sort((a, b) => String(b.at).localeCompare(String(a.at)));
+    $('subs').hidden = !docs.length; const l = $('sublist'); l.textContent = '';
+    docs.forEach(d => {
+      const box = document.createElement('div'); box.className = 'sub';
+      const h = document.createElement('b'); h.textContent = (d.who || 'Someone') + ' \u00b7 ' + (d.at ? new Date(d.at).toLocaleString() : ''); box.appendChild(h);
+      const pre = document.createElement('pre');
+      const rows = []; const roles = new Set([...Object.keys(d.picks || {}), ...Object.keys(d.comments || {})]);
+      roles.forEach(r => rows.push(r + ': ' + ((d.picks && d.picks[r]) || []).join(', ') + (d.comments && d.comments[r] ? '  | ' + d.comments[r] : '')));
+      pre.textContent = rows.join('\n') || '(empty)'; box.appendChild(pre); l.appendChild(box);
+    });
+  }
+
+  render();
+  if (window.claude && claude.use) {
+    claude.use('db').then(d => {
+      db = d; if (!db) { offline(); return; }
+      try { db.collection('picks').onSnapshot(showSubs, () => {}); } catch (e) {}
+    });
+  } else { offline(); }
+  function offline(){
+    $('submit').hidden = true; $('copy').className = 'btn'; $('copy').textContent = 'Copy my picks';
+    const h = $('howsend'); h.textContent = 'press '; const b = document.createElement('b'); b.textContent = 'Copy my picks'; h.appendChild(b);
+    h.appendChild(document.createTextNode(', then paste the text to Ruben'));
+    setStatus('When you are done: Copy my picks, then paste it to Ruben.');
+  }
+})();
+</script>
+</body></html>
